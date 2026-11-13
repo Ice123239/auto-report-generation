@@ -809,7 +809,9 @@ else:
                     )
                     detected_offense = str(violation.get("offense") or "")
                     plate_number = str(violation.get("plate_number") or "")
-                    if plate_number in (
+                    if "ทางเท้า" in detected_offense:
+                        default_offense = OFFENSE_OPTIONS[0]
+                    elif plate_number in (
                         "ไม่ติดแผ่นป้ายทะเบียน",
                         UNREADABLE_PLATE,
                     ):

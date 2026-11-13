@@ -22,12 +22,13 @@ def _load_ocr_reader() -> Any:
 class PlateOCR:
     """Extract a likely license-plate string from an OpenCV BGR image."""
 
-    _PLATE_LIKE = re.compile(r"(?=.*\d)(?=.*[ก-๙A-Za-z])[ก-๙A-Za-z0-9\s-]{3,}")
     UNREADABLE_PLATE = "ไม่ติดแผ่นป้ายทะเบียน/ไม่ชัดเจน"
     DEFAULT_MIN_CONFIDENCE = 0.3
     _UPSCALE_FACTOR = 2.5
-    _LATIN_TO_DIGIT = str.maketrans({"O": "0", "o": "0", "I": "1", "i": "1", "l": "1"})
-    _THAI_PLATE = re.compile(r"^(\d{1,2})([ก-๙A-Z]{1,3})(\d{1,4})$")
+    _THAI_PLATE = re.compile(
+        r"(?<![0-9ก-๙A-Za-z])([0-9]?[ก-ฮ]{2})\s*([0-9]{1,4})"
+        r"(?![0-9ก-๙A-Za-z])"
+    )
 
     def __init__(
         self,
@@ -71,13 +72,10 @@ class PlateOCR:
 
     @classmethod
     def clean_plate_text(cls, text: str) -> str:
-        """Normalize OCR output to the common Thai plate layout."""
-        compact = re.sub(r"[\s-]+", "", text).translate(cls._LATIN_TO_DIGIT).upper()
-        match = cls._THAI_PLATE.fullmatch(compact)
-        if match:
-            category, letters, digits = match.groups()
-            return f"{category}{letters} {digits}"
-        return " ".join(text.split())
+        """Extract a Thai plate and discard unrelated or repeated OCR text."""
+        for match in cls._THAI_PLATE.finditer(text):
+            return f"{match.group(1)} {match.group(2)}"
+        return ""
 
     def read_plate(self, image: np.ndarray) -> dict[str, Any]:
         """Return the best plate-like OCR candidate and all recognized text."""
@@ -124,15 +122,14 @@ class PlateOCR:
                 detections.append((text, score, original_polygon))
         best_by_text: dict[str, tuple[str, float, np.ndarray | None]] = {}
         for detection in detections:
-            previous = best_by_text.get(detection[0])
+            plate_text = self.clean_plate_text(detection[0])
+            if not plate_text:
+                continue
+            previous = best_by_text.get(plate_text)
             if previous is None or detection[1] > previous[1]:
-                best_by_text[detection[0]] = detection
+                best_by_text[plate_text] = (plate_text, detection[1], detection[2])
         detections = list(best_by_text.values())
-        candidates = [
-            (text, score, polygon)
-            for text, score, polygon in detections
-            if self._PLATE_LIKE.search(text.replace("\n", " "))
-        ]
+        candidates = detections
         candidate, confidence, polygon = (
             max(
                 candidates,
@@ -144,8 +141,6 @@ class PlateOCR:
             if candidates
             else ("", 0.0, None)
         )
-        if candidate:
-            candidate = self.clean_plate_text(candidate)
         if confidence <= self.min_confidence:
             candidate = self.UNREADABLE_PLATE
             polygon = None

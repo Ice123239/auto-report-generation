@@ -1,3 +1,5 @@
+<img width="1917" height="927" alt="Screenshot 2026-11-06 214327" src="https://github.com/user-attachments/assets/49a4f29a-0347-4236-841f-c45fb0bbac1a" />
+<img width="1917" height="972" alt="Screenshot 2026-11-06 214250" src="https://github.com/user-attachments/assets/5bd6022b-314c-4d7c-bc52-45eb0a9fb09f" />
 # Traffic Violation Report Generator
 
 Streamlit application for processing image and video evidence, detecting motorcycle

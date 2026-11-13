@@ -1,5 +1,5 @@
 streamlit>=1.32
-opencv-python>=4.8
+opencv-python-headless>=4.8
 ultralytics>=8.1
 fpdf2>=2.7.9
 easyocr>=1.7.2

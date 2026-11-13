@@ -11,6 +11,8 @@ import numpy as np
 import streamlit as st
 from ultralytics import YOLO
 
+from src.image_utils import resize_image_width
+
 
 @st.cache_resource(show_spinner="กำลังโหลดโมเดล YOLOv8...")
 def _load_yolo_model(model_path: str) -> YOLO:
@@ -138,6 +140,7 @@ class ViolationDetector:
         if image.ndim != 3 or image.shape[2] != 3:
             raise ValueError("image must have three color channels (BGR).")
 
+        image = resize_image_width(image)
         results = self.model.predict(
             source=image,
             conf=self.confidence,

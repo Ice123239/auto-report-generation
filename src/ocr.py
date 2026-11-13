@@ -9,6 +9,8 @@ import cv2
 import numpy as np
 import streamlit as st
 
+from src.image_utils import resize_image_width
+
 
 @st.cache_resource(show_spinner="กำลังเตรียมระบบอ่านข้อความป้ายทะเบียน...")
 def _load_ocr_reader() -> Any:
@@ -84,6 +86,7 @@ class PlateOCR:
         if image.ndim != 3 or image.shape[2] != 3:
             raise ValueError("image must have three color channels (BGR).")
 
+        image = resize_image_width(image)
         plate_region = image[int(image.shape[0] * 0.45):, :]
         if plate_region.size == 0:
             plate_region = image

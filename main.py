@@ -19,6 +19,7 @@ from PIL import ExifTags, Image
 import streamlit as st
 
 from src.detector import ViolationDetector
+from src.image_utils import MAX_INFERENCE_IMAGE_WIDTH, resize_image_width
 from src.ocr import PlateOCR
 from src.report_generator import ReportGenerator
 
@@ -555,7 +556,12 @@ else:
         st.subheader("หลักฐานต้นฉบับ")
         if suffix in IMAGE_SUFFIXES:
             try:
-                source_image = Image.open(BytesIO(media_bytes)).convert("RGB")
+                with Image.open(BytesIO(media_bytes)) as uploaded_image:
+                    uploaded_image.thumbnail(
+                        (MAX_INFERENCE_IMAGE_WIDTH, uploaded_image.height),
+                        Image.Resampling.LANCZOS,
+                    )
+                    source_image = uploaded_image.convert("RGB")
             except (OSError, ValueError) as error:
                 st.error(f"ไม่สามารถอ่านไฟล์ภาพได้: {error}")
                 st.stop()
@@ -621,6 +627,7 @@ else:
                                 if not success:
                                     break
                                 if frame_index % frame_interval == 0:
+                                    frame = resize_image_width(frame)
                                     captured_at = datetime.now().astimezone()
                                     violations.extend(
                                         detector.detect(frame, captured_at=captured_at)

@@ -29,7 +29,7 @@ DEFAULT_LOCATION = "ถนนสุขุมวิท เขตวัฒนา �
 DEFAULT_ROI_TOP = 0.65
 DEFAULT_ROI_HEIGHT = 0.35
 UNREADABLE_PLATE = PlateOCR.UNREADABLE_PLATE
-VIOLATION_DESCRIPTION = "ขับขี่รถจักรยานยนต์โดยไม่สวมหมวกนิรภัย"
+VIOLATION_DESCRIPTION = "ขับขี่รถจักรยานยนต์บนทางเท้า"
 OFFENSE_OPTIONS = [
     "ขับขี่รถจักรยานยนต์บนทางเท้า",
     "ไม่ติดแผ่นป้ายทะเบียน/ป้ายไม่ชัดเจน",
@@ -53,6 +53,43 @@ THAI_BANKS = [
     "ธนาคารแลนด์ แอนด์ เฮ้าส์ (LHBANK)",
     "ธนาคารอิสลามแห่งประเทศไทย (iBank)",
 ]
+
+
+def _draw_sidewalk_roi(
+    image: np.ndarray,
+    roi_top: float,
+    roi_height: float,
+) -> np.ndarray:
+    preview = image.copy()
+    image_height, image_width = preview.shape[:2]
+    top = round(roi_top * (image_height - 1))
+    bottom = round(min(1.0, roi_top + roi_height) * (image_height - 1))
+    overlay = preview.copy()
+    cv2.rectangle(overlay, (0, top), (image_width - 1, bottom), (0, 0, 255), -1)
+    cv2.addWeighted(overlay, 0.2, preview, 0.8, 0, dst=preview)
+    cv2.rectangle(preview, (0, top), (image_width - 1, bottom), (0, 0, 255), 4)
+    return preview
+
+
+def _read_video_first_frame(media_bytes: bytes, suffix: str) -> np.ndarray:
+    temporary_path: str | None = None
+    capture: cv2.VideoCapture | None = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temporary_file:
+            temporary_file.write(media_bytes)
+            temporary_path = temporary_file.name
+        capture = cv2.VideoCapture(temporary_path)
+        if not capture.isOpened():
+            raise ValueError("ไม่สามารถเปิดไฟล์วิดีโอได้")
+        success, frame = capture.read()
+        if not success or frame is None:
+            raise ValueError("ไม่สามารถอ่านเฟรมแรกของวิดีโอได้")
+        return frame
+    finally:
+        if capture is not None:
+            capture.release()
+        if temporary_path is not None:
+            Path(temporary_path).unlink(missing_ok=True)
 
 
 def _dms_to_degrees(values: tuple[object, ...]) -> float:
@@ -465,10 +502,13 @@ else:
             if suffix in IMAGE_SUFFIXES
             else None
         )
+        same_active_evidence = (
+            st.session_state.get("active_evidence_sha256") == image_sha256
+        )
         duplicate_evidence = any(
             item.get("image_sha256") == image_sha256
             for item in st.session_state["detection_history"]
-        )
+        ) and not same_active_evidence
         address_default = ""
 
         with st.sidebar:
@@ -559,11 +599,28 @@ else:
             except (OSError, ValueError) as error:
                 st.error(f"ไม่สามารถอ่านไฟล์ภาพได้: {error}")
                 st.stop()
-            st.image(source_image, use_container_width=True)
+            preview_bgr = cv2.cvtColor(np.asarray(source_image), cv2.COLOR_RGB2BGR)
         else:
             source_image = None
+            try:
+                preview_bgr = _read_video_first_frame(media_bytes, suffix)
+            except (OSError, ValueError) as error:
+                st.error(f"ไม่สามารถอ่านวิดีโอได้: {error}")
+                st.stop()
             st.video(media_bytes)
             st.info("วิดีโอจะถูกตรวจทุก 1 วินาทีเพื่อค้นหาภาพหลักฐาน")
+        st.image(
+            cv2.cvtColor(
+                _draw_sidewalk_roi(preview_bgr, roi_top, roi_height),
+                cv2.COLOR_BGR2RGB,
+            ),
+            caption=(
+                "ตัวอย่างกรอบ ROI ทางเท้าแบบเรียลไทม์ "
+                f"(Y-Top={roi_top:.2f}, Height={roi_height:.2f})"
+            ),
+            use_container_width=True,
+        )
+        st.caption("กรอบสีแดงแสดงตำแหน่งและความสูงของเขตทางเท้าตาม Slider")
 
         if st.session_state.get("processed_key") != media_key:
             for key in ("violations", "sidewalk_result", "processed_key", "report_pdf", "report_key"):
@@ -571,11 +628,15 @@ else:
 
         if duplicate_evidence:
             st.warning("ไฟล์นี้เคยถูกบันทึกในเซสชันนี้แล้ว เพื่อป้องกันการส่งซ้ำ")
-        if st.button(
-            "ประมวลผลและค้นหาการกระทำผิด",
+        process_clicked = st.button(
+            "ประมวลผลซ้ำและค้นหาการกระทำผิด",
             type="primary",
             disabled=duplicate_evidence,
-        ):
+        )
+        if (
+            st.session_state.get("processed_key") != media_key
+            and not duplicate_evidence
+        ) or process_clicked:
             for key in ("report_pdf", "report_key", "ocr_error"):
                 st.session_state.pop(key, None)
             processing_status = st.status("กำลังประมวลผลหลักฐาน...", expanded=False)
@@ -705,6 +766,12 @@ else:
                     f"{media_key}|{processed_at.isoformat()}".encode("utf-8")
                 ).hexdigest()
                 history = st.session_state["detection_history"]
+                if same_active_evidence:
+                    history[:] = [
+                        item
+                        for item in history
+                        if item.get("image_sha256") != image_sha256
+                    ]
                 for index, violation in enumerate(violations, start=1):
                     record_id = f"{run_id}-{index}"
                     captured_at = violation["captured_at"]
@@ -725,6 +792,7 @@ else:
                         "longitude": violation.get("longitude"),
                     })
                     violation["_history_id"] = record_id
+                st.session_state["active_evidence_sha256"] = image_sha256
                 processing_status.update(
                     label="ประมวลผลเสร็จแล้ว",
                     state="complete",
@@ -769,8 +837,8 @@ else:
             if not violations:
                 st.warning(
                     "ไม่พบรถจักรยานยนต์ในเขต ROI ที่กำหนด กรุณาขยับ Slider "
-                    "'ตำแหน่งขอบบนทางเท้า (Y-Top)' ให้ครอบคลุมตัวรถ "
-                    "แล้วกดประมวลผลอีกครั้ง"
+                    "'ตำแหน่งขอบบนทางเท้า (Y-Top)' หรือ Height ให้ครอบคลุมตัวรถ "
+                    "ระบบจะตรวจซ้ำอัตโนมัติเมื่อปรับค่า"
                 )
             else:
                 st.success(f"พบรายการที่เข้าเงื่อนไข {len(violations)} รายการ")
@@ -800,19 +868,8 @@ else:
                     st.caption(
                         f"ข้อความ OCR: {violation.get('plate_ocr_text') or 'ไม่พบข้อความ'}"
                     )
-                    detected_offense = str(violation.get("offense") or "")
                     plate_number = str(violation.get("plate_number") or "")
-                    if plate_number in (
-                        "ไม่ติดแผ่นป้ายทะเบียน",
-                        UNREADABLE_PLATE,
-                    ):
-                        default_offense = OFFENSE_OPTIONS[1]
-                    elif "หมวกนิรภัย" in detected_offense:
-                        default_offense = OFFENSE_OPTIONS[2]
-                    elif "ทางเท้า" in detected_offense:
-                        default_offense = OFFENSE_OPTIONS[0]
-                    else:
-                        default_offense = OFFENSE_OPTIONS[0]
+                    default_offense = OFFENSE_OPTIONS[0]
                     offense_key = f"offense_{media_key}_{index}"
                     if offense_key not in st.session_state:
                         st.session_state[offense_key] = default_offense

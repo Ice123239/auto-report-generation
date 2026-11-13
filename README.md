@@ -9,8 +9,9 @@ a PDF report.
 1. Install the dependencies with `pip install -r requirements.txt`.
 2. Run the application with `streamlit run main.py`.
 3. Place the YOLOv8 weights file named `yolov8n.pt` in the project working
-   directory; its path is locked in the sidebar. Then upload an image or video and
-   process the evidence. GPS coordinates are read from image EXIF
+   directory; its path is locked in the sidebar. Then upload an image or video;
+   the app previews the sidewalk ROI and starts processing automatically. GPS
+   coordinates are read from image EXIF
    when available; address lookup is optional and requires opting in to send those
    coordinates to OpenStreetMap's Nominatim service. Without EXIF GPS, the location
    defaults to "ถนนสุขุมวิท เขตวัฒนา กรุงเทพมหานคร" and can be edited before processing.
@@ -26,11 +27,14 @@ and EasyOCR models are cached as Streamlit resources.
 The confidence slider defaults to `0.20`; for close-up test images, try values from
 `0.15` to `0.20`. Lower thresholds may increase false detections.
 
-EasyOCR reads candidate plate text with Thai and English models. Review and correct
-the editable result before downloading the PDF; confidence at or below 30% defaults to
+For motorcycle detections, the detector first searches the lower-middle part of the
+vehicle bounding box for a white rectangular plate and falls back to that region if
+no likely plate is found. EasyOCR reads candidate plate text with Thai and English
+models. Review and correct the editable result before downloading the PDF;
+confidence at or below 30% defaults to
 "ไม่ติดแผ่นป้ายทะเบียน/ไม่ชัดเจน". The plate crop and OCR text are shown with each
-detection. OCR enlarges the crop 2.5x and tries grayscale contrast enhancement and
-Otsu thresholding. Detection history labels plates as AI-scanned or reporter-confirmed/
+detection. OCR enlarges the crop 3x and applies grayscale CLAHE contrast enhancement.
+Detection history labels plates as AI-scanned or reporter-confirmed/
 edited. Edit the plate and then select "สร้างรายงาน PDF". Select
 "ไม่ติดแผ่นป้ายทะเบียน" only when a missing plate is visibly confirmed; the PDF then
 includes the additional offense. Detection history, including processing time,

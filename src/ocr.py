@@ -23,7 +23,7 @@ class PlateOCR:
     _PLATE_LIKE = re.compile(r"(?=.*\d)(?=.*[ก-๙A-Za-z])[ก-๙A-Za-z0-9\s-]{3,}")
     UNREADABLE_PLATE = "ไม่ติดแผ่นป้ายทะเบียน/ไม่ชัดเจน"
     DEFAULT_MIN_CONFIDENCE = 0.3
-    _UPSCALE_FACTOR = 2.5
+    _UPSCALE_FACTOR = 3
     _LATIN_TO_DIGIT = str.maketrans({"O": "0", "o": "0", "I": "1", "i": "1", "l": "1"})
     _THAI_PLATE = re.compile(r"^(\d{1,2})([ก-๙A-Z]{1,3})(\d{1,4})$")
 
@@ -84,9 +84,7 @@ class PlateOCR:
         if image.ndim != 3 or image.shape[2] != 3:
             raise ValueError("image must have three color channels (BGR).")
 
-        plate_region = image[int(image.shape[0] * 0.45):, :]
-        if plate_region.size == 0:
-            plate_region = image
+        plate_region = image
         enlarged = cv2.resize(
             plate_region,
             None,
@@ -98,27 +96,19 @@ class PlateOCR:
         enhanced = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(
             grayscale
         )
-        _, thresholded = cv2.threshold(
+        result = self.engine.readtext(
             enhanced,
-            0,
-            255,
-            cv2.THRESH_BINARY + cv2.THRESH_OTSU,
+            detail=1,
+            paragraph=False,
         )
-
-        detections: list[tuple[str, float, np.ndarray | None]] = []
-        for processed_image in (enhanced, thresholded):
-            result = self.engine.readtext(
-                processed_image,
-                detail=1,
-                paragraph=False,
+        detections = [
+            (
+                text,
+                score,
+                polygon / self._UPSCALE_FACTOR if polygon is not None else None,
             )
-            for text, score, polygon in self._ocr_detections(result):
-                original_polygon = (
-                    polygon / self._UPSCALE_FACTOR
-                    if polygon is not None
-                    else None
-                )
-                detections.append((text, score, original_polygon))
+            for text, score, polygon in self._ocr_detections(result)
+        ]
         best_by_text: dict[str, tuple[str, float, np.ndarray | None]] = {}
         for detection in detections:
             previous = best_by_text.get(detection[0])

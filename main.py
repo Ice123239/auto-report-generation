@@ -858,10 +858,10 @@ else:
                         ),
                         use_container_width=True,
                     )
-                    plate_crop = violation.get("plate_crop")
-                    if plate_crop is not None and plate_crop.size:
+                    plate_image = violation.get("plate_image")
+                    if isinstance(plate_image, np.ndarray) and plate_image.size:
                         st.image(
-                            cv2.cvtColor(plate_crop, cv2.COLOR_BGR2RGB),
+                            cv2.cvtColor(plate_image, cv2.COLOR_BGR2RGB),
                             caption=f"ภาพ Crop ป้ายทะเบียน {index}",
                             width=320,
                         )

@@ -134,51 +134,11 @@ class ViolationDetector:
         x1, y1, x2, y2 = bbox
         vehicle = image[y1:y2, x1:x2]
         vehicle_height, vehicle_width = vehicle.shape[:2]
-        crop_x1 = int(vehicle_width * 0.25)
-        crop_x2 = int(vehicle_width * 0.75)
-        crop_y1 = int(vehicle_height * 0.55)
-        crop_y2 = int(vehicle_height * 0.92)
-        candidate = vehicle[crop_y1:crop_y2, crop_x1:crop_x2]
-        if candidate.size == 0:
-            return vehicle.copy()
-
-        gray = cv2.cvtColor(candidate, cv2.COLOR_BGR2GRAY)
-        _, white_regions = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
-        white_regions = cv2.morphologyEx(
-            white_regions,
-            cv2.MORPH_CLOSE,
-            np.ones((3, 3), dtype=np.uint8),
-        )
-        contours, _ = cv2.findContours(
-            white_regions,
-            cv2.RETR_EXTERNAL,
-            cv2.CHAIN_APPROX_SIMPLE,
-        )
-        candidate_area = candidate.shape[0] * candidate.shape[1]
-        plate_bounds: list[tuple[int, int, int, int, float]] = []
-        for contour in contours:
-            px, py, width, height = cv2.boundingRect(contour)
-            area = cv2.contourArea(contour)
-            aspect_ratio = width / height if height else 0.0
-            rectangularity = area / (width * height) if width and height else 0.0
-            if (
-                area >= candidate_area * 0.005
-                and 1.0 <= aspect_ratio <= 5.5
-                and rectangularity >= 0.45
-            ):
-                plate_bounds.append((px, py, px + width, py + height, area))
-
-        if not plate_bounds:
-            return candidate.copy()
-
-        px1, py1, px2, py2, _ = max(plate_bounds, key=lambda bounds: bounds[4])
-        padding_x = max(2, int((px2 - px1) * 0.04))
-        padding_y = max(2, int((py2 - py1) * 0.08))
-        px1 = max(0, px1 - padding_x)
-        py1 = max(0, py1 - padding_y)
-        px2 = min(candidate.shape[1], px2 + padding_x)
-        py2 = min(candidate.shape[0], py2 + padding_y)
-        return candidate[py1:py2, px1:px2].copy()
+        crop_x1 = int(vehicle_width * 0.15)
+        crop_x2 = int(vehicle_width * 0.85)
+        crop_y1 = int(vehicle_height * 0.45)
+        crop_y2 = int(vehicle_height * 0.95)
+        return vehicle[crop_y1:crop_y2, crop_x1:crop_x2].copy()
 
     def detect(
         self, image: np.ndarray, captured_at: datetime | None = None
@@ -194,7 +154,10 @@ class ViolationDetector:
         if image.ndim != 3 or image.shape[2] != 3:
             raise ValueError("image must have three color channels (BGR).")
 
+        source_image = image
         image = resize_image_width(image)
+        scale_x = source_image.shape[1] / image.shape[1]
+        scale_y = source_image.shape[0] / image.shape[0]
         results = self.model.predict(
             source=image,
             conf=self.confidence,
@@ -359,7 +322,13 @@ class ViolationDetector:
                 image.shape[0],
             )
             evidence = image[y1:y2, x1:x2].copy()
-            plate_image = self._crop_motorcycle_plate(image, motorcycle["bbox"])
+            plate_bbox = (
+                round(motorcycle["bbox"][0] * scale_x),
+                round(motorcycle["bbox"][1] * scale_y),
+                round(motorcycle["bbox"][2] * scale_x),
+                round(motorcycle["bbox"][3] * scale_y),
+            )
+            plate_image = self._crop_motorcycle_plate(source_image, plate_bbox)
             offense_parts: list[str] = []
             if riding_on_sidewalk:
                 offense_parts.append("ขับขี่บนทางเท้า")

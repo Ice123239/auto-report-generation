@@ -864,81 +864,89 @@ else:
                         f"**รายการ {index}** · เวลา {captured_at} · "
                         f"ความมั่นใจ {violation['confidence']:.1%}"
                     )
-                    st.image(
-                        cv2.cvtColor(violation["evidence_image"], cv2.COLOR_BGR2RGB),
-                        caption=(
-                            "ภาพหลักฐานหลัก — รถคันใหญ่ที่สุด"
-                            if index == 1
-                            else f"ภาพหลักฐาน {index}"
-                        ),
-                        use_container_width=True,
-                    )
-                    plate_crop = violation.get("plate_crop")
-                    if isinstance(plate_crop, np.ndarray) and plate_crop.size:
+                    col1, col2 = st.columns([1.2, 1])
+                    with col1:
                         st.image(
-                            cv2.cvtColor(plate_crop, cv2.COLOR_BGR2RGB),
-                            caption=f"ภาพ Crop ป้ายทะเบียน {index}",
-                            width=320,
+                            cv2.cvtColor(
+                                violation["evidence_image"],
+                                cv2.COLOR_BGR2RGB,
+                            ),
+                            caption=(
+                                "ภาพหลักฐานหลัก — รถคันใหญ่ที่สุด"
+                                if index == 1
+                                else f"ภาพหลักฐาน {index}"
+                            ),
+                            width=480,
                         )
-                    st.caption(
-                        f"ทะเบียนที่ AI อ่านได้: {violation.get('plate_number') or UNREADABLE_PLATE}"
-                    )
-                    st.caption(
-                        f"ข้อความ OCR: {violation.get('plate_ocr_text') or 'ไม่พบข้อความ'}"
-                    )
-                    plate_number = str(violation.get("plate_number") or "")
-                    default_offense = OFFENSE_OPTIONS[0]
-                    offense_key = f"offense_{media_key}_{index}"
-                    if offense_key not in st.session_state:
-                        st.session_state[offense_key] = default_offense
-                    offense = st.selectbox(
-                        f"เลือก/แก้ไขข้อหาความผิด รายการ {index}",
-                        OFFENSE_OPTIONS,
-                        key=offense_key,
-                    )
-                    if offense == NO_VIOLATION:
+                    with col2:
+                        plate_crop = violation.get("plate_crop")
+                        if isinstance(plate_crop, np.ndarray) and plate_crop.size:
+                            st.image(
+                                cv2.cvtColor(plate_crop, cv2.COLOR_BGR2RGB),
+                                caption=f"ภาพ Crop ป้ายทะเบียน {index}",
+                                width=240,
+                            )
+                        st.caption(
+                            f"ทะเบียนที่ AI อ่านได้: "
+                            f"{violation.get('plate_number') or UNREADABLE_PLATE}"
+                        )
+                        st.caption(
+                            f"ข้อความ OCR: "
+                            f"{violation.get('plate_ocr_text') or 'ไม่พบข้อความ'}"
+                        )
+                        plate_number = str(violation.get("plate_number") or "")
+                        default_offense = OFFENSE_OPTIONS[0]
+                        offense_key = f"offense_{media_key}_{index}"
+                        if offense_key not in st.session_state:
+                            st.session_state[offense_key] = default_offense
+                        offense = st.selectbox(
+                            f"เลือก/แก้ไขข้อหาความผิด รายการ {index}",
+                            OFFENSE_OPTIONS,
+                            key=offense_key,
+                        )
+                        if offense == NO_VIOLATION:
+                            history_id = violation.get("_history_id")
+                            st.session_state["detection_history"][:] = [
+                                item
+                                for item in st.session_state["detection_history"]
+                                if item["record_id"] != history_id
+                            ]
+                            st.info(f"ตัดรายการที่ {index} ออกจากประวัติและรายงานแล้ว")
+                            continue
+
+                        if offense == OFFENSE_OPTIONS[1] and plate_number == UNREADABLE_PLATE:
+                            plate_number = "ไม่ติดแผ่นป้ายทะเบียน/ป้ายไม่ชัดเจน"
+                        if offense == OFFENSE_OPTIONS[2]:
+                            offense = "ไม่สวมหมวกนิรภัย"
+                        elif offense == OFFENSE_OPTIONS[0]:
+                            offense = "ขับขี่รถจักรยานยนต์บนทางเท้า"
+                        elif offense == OFFENSE_OPTIONS[3]:
+                            offense = "ฝ่าฝืนสัญญาณไฟจราจร"
+
+                        plate_number = st.text_input(
+                            f"ป้ายทะเบียน รายการ {index}",
+                            value=plate_number or UNREADABLE_PLATE,
+                            key=f"plate_{media_key}_{index}",
+                        )
+                        human_verified = st.checkbox(
+                            f"ยืนยัน/แก้ไขป้ายทะเบียนโดยผู้แจ้ง รายการ {index}",
+                            key=f"plate_verified_{media_key}_{index}",
+                        )
+                        plate_source = (
+                            "ยืนยัน/แก้ไขโดยผู้แจ้ง"
+                            if human_verified
+                            or plate_number.strip()
+                            != str(violation.get("plate_number") or "").strip()
+                            else violation.get("plate_source", "สแกนด้วย AI")
+                        )
                         history_id = violation.get("_history_id")
-                        st.session_state["detection_history"][:] = [
-                            item
-                            for item in st.session_state["detection_history"]
-                            if item["record_id"] != history_id
-                        ]
-                        st.info(f"ตัดรายการที่ {index} ออกจากประวัติและรายงานแล้ว")
-                        continue
-
-                    if offense == OFFENSE_OPTIONS[1] and plate_number == UNREADABLE_PLATE:
-                        plate_number = "ไม่ติดแผ่นป้ายทะเบียน/ป้ายไม่ชัดเจน"
-                    if offense == OFFENSE_OPTIONS[2]:
-                        offense = "ไม่สวมหมวกนิรภัย"
-                    elif offense == OFFENSE_OPTIONS[0]:
-                        offense = "ขับขี่รถจักรยานยนต์บนทางเท้า"
-                    elif offense == OFFENSE_OPTIONS[3]:
-                        offense = "ฝ่าฝืนสัญญาณไฟจราจร"
-
-                    plate_number = st.text_input(
-                        f"ป้ายทะเบียน รายการ {index}",
-                        value=plate_number or UNREADABLE_PLATE,
-                        key=f"plate_{media_key}_{index}",
-                    )
-                    human_verified = st.checkbox(
-                        f"ยืนยัน/แก้ไขป้ายทะเบียนโดยผู้แจ้ง รายการ {index}",
-                        key=f"plate_verified_{media_key}_{index}",
-                    )
-                    plate_source = (
-                        "ยืนยัน/แก้ไขโดยผู้แจ้ง"
-                        if human_verified
-                        or plate_number.strip()
-                        != str(violation.get("plate_number") or "").strip()
-                        else violation.get("plate_source", "สแกนด้วย AI")
-                    )
-                    history_id = violation.get("_history_id")
-                    for history_item in st.session_state["detection_history"]:
-                        if history_item["record_id"] == history_id:
-                            history_item["plate_number"] = plate_number.strip()
-                            history_item["location"] = location
-                            history_item["offense"] = offense
-                            history_item["plate_source"] = plate_source
-                            break
+                        for history_item in st.session_state["detection_history"]:
+                            if history_item["record_id"] == history_id:
+                                history_item["plate_number"] = plate_number.strip()
+                                history_item["location"] = location
+                                history_item["offense"] = offense
+                                history_item["plate_source"] = plate_source
+                                break
             if not violations:
                 report_violations = []
 

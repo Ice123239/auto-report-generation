@@ -314,7 +314,10 @@ def _select_clearest_video_detections(
 ) -> list[dict[str, object]]:
     """Keep the sharpest sampled frame for each overlapping vehicle box."""
     def detection_sharpness(item: dict[str, object]) -> float:
-        image = item.get("plate_image", item.get("evidence_image"))
+        image = item.get(
+            "plate_search_image",
+            item.get("plate_image", item.get("evidence_image")),
+        )
         return _sharpness_score(image) if isinstance(image, np.ndarray) else 0.0
 
     ranked = sorted(
@@ -727,7 +730,11 @@ else:
                         plate_reader = PlateOCR()
                         for violation in violations:
                             plate_result = plate_reader.read_plate(
-                                violation.get("plate_image", violation["evidence_image"])
+                                violation.get(
+                                    "plate_search_image",
+                                    violation["evidence_image"],
+                                ),
+                                fallback_image=violation.get("plate_fallback_image"),
                             )
                             plate_number = plate_result["plate_number"]
                             if (
@@ -744,6 +751,7 @@ else:
                             violation["plate_ocr_text"] = plate_result["raw_text"]
                             violation["plate_ocr_confidence"] = plate_result["confidence"]
                             violation["plate_crop"] = plate_result["plate_crop"]
+                            violation["plate_image"] = plate_result["plate_crop"]
                     except (ImportError, OSError, RuntimeError, TypeError, ValueError, AttributeError) as error:
                         st.session_state["ocr_error"] = str(error)
                         for vehicle_index, violation in enumerate(violations):
@@ -756,6 +764,13 @@ else:
                             violation.setdefault("plate_source", "สแกนด้วย AI (อ่านไม่ได้)")
                             violation.setdefault("plate_ocr_text", "")
                             violation.setdefault("plate_ocr_confidence", 0.0)
+                            fallback_crop = violation.get(
+                                "plate_fallback_image",
+                                violation.get("plate_search_image"),
+                            )
+                            if isinstance(fallback_crop, np.ndarray):
+                                violation["plate_crop"] = fallback_crop
+                                violation["plate_image"] = fallback_crop
 
                 st.session_state["violations"] = violations
                 st.session_state["sidewalk_result"] = sidewalk_result
@@ -858,13 +873,16 @@ else:
                         ),
                         use_container_width=True,
                     )
-                    plate_image = violation.get("plate_image")
-                    if isinstance(plate_image, np.ndarray) and plate_image.size:
+                    plate_crop = violation.get("plate_crop")
+                    if isinstance(plate_crop, np.ndarray) and plate_crop.size:
                         st.image(
-                            cv2.cvtColor(plate_image, cv2.COLOR_BGR2RGB),
+                            cv2.cvtColor(plate_crop, cv2.COLOR_BGR2RGB),
                             caption=f"ภาพ Crop ป้ายทะเบียน {index}",
                             width=320,
                         )
+                    st.caption(
+                        f"ทะเบียนที่ AI อ่านได้: {violation.get('plate_number') or UNREADABLE_PLATE}"
+                    )
                     st.caption(
                         f"ข้อความ OCR: {violation.get('plate_ocr_text') or 'ไม่พบข้อความ'}"
                     )

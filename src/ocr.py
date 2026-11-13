@@ -77,16 +77,26 @@ class PlateOCR:
             return f"{category}{letters} {digits}"
         return " ".join(text.split())
 
-    def read_plate(self, image: np.ndarray) -> dict[str, Any]:
-        """Return the best plate-like OCR candidate and all recognized text."""
+    def read_plate(
+        self,
+        image: np.ndarray,
+        fallback_image: np.ndarray | None = None,
+    ) -> dict[str, Any]:
+        """Locate plate text and return its padded crop or a fallback crop."""
         if not isinstance(image, np.ndarray) or image.size == 0:
             raise ValueError("image must be a non-empty OpenCV image.")
         if image.ndim != 3 or image.shape[2] != 3:
             raise ValueError("image must have three color channels (BGR).")
+        if fallback_image is not None and (
+            not isinstance(fallback_image, np.ndarray)
+            or fallback_image.size == 0
+            or fallback_image.ndim != 3
+            or fallback_image.shape[2] != 3
+        ):
+            raise ValueError("fallback_image must be a non-empty three-channel BGR image.")
 
-        plate_region = image
         enlarged = cv2.resize(
-            plate_region,
+            image,
             None,
             fx=self._UPSCALE_FACTOR,
             fy=self._UPSCALE_FACTOR,
@@ -124,6 +134,7 @@ class PlateOCR:
             max(
                 candidates,
                 key=lambda detection: (
+                    detection[2] is not None,
                     any("\u0e01" <= character <= "\u0e59" for character in detection[0]),
                     detection[1],
                 ),
@@ -136,14 +147,24 @@ class PlateOCR:
         if confidence <= self.min_confidence:
             candidate = self.UNREADABLE_PLATE
             polygon = None
-        plate_crop = plate_region.copy()
+        plate_crop = (
+            fallback_image.copy()
+            if fallback_image is not None
+            else image.copy()
+        )
         if polygon is not None and polygon.size:
-            x1 = max(0, int(np.floor(polygon[:, 0].min())))
-            y1 = max(0, int(np.floor(polygon[:, 1].min())))
-            x2 = min(plate_region.shape[1], int(np.ceil(polygon[:, 0].max())) + 1)
-            y2 = min(plate_region.shape[0], int(np.ceil(polygon[:, 1].max())) + 1)
+            text_x1 = float(polygon[:, 0].min())
+            text_y1 = float(polygon[:, 1].min())
+            text_x2 = float(polygon[:, 0].max())
+            text_y2 = float(polygon[:, 1].max())
+            padding_x = (text_x2 - text_x1) * 0.25
+            padding_y = (text_y2 - text_y1) * 0.40
+            x1 = max(0, int(np.floor(text_x1 - padding_x)))
+            y1 = max(0, int(np.floor(text_y1 - padding_y)))
+            x2 = min(image.shape[1], int(np.ceil(text_x2 + padding_x)) + 1)
+            y2 = min(image.shape[0], int(np.ceil(text_y2 + padding_y)) + 1)
             if x2 > x1 and y2 > y1:
-                plate_crop = plate_region[y1:y2, x1:x2].copy()
+                plate_crop = image[y1:y2, x1:x2].copy()
 
         return {
             "plate_number": candidate,

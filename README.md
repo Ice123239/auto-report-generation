@@ -29,10 +29,11 @@ and EasyOCR models are cached as Streamlit resources.
 The confidence slider defaults to `0.20`; for close-up test images, try values from
 `0.15` to `0.20`. Lower thresholds may increase false detections.
 
-For motorcycle detections, the detector first searches the lower-middle part of the
-vehicle bounding box for a white rectangular plate and falls back to that region if
-no likely plate is found. EasyOCR reads candidate plate text with Thai and English
-models. Review and correct the editable result before downloading the PDF;
+For motorcycle detections, EasyOCR searches the vehicle image below its top 35% and
+uses the detected text bounds with padding to crop the plate. If no likely text is
+found, the app displays the vehicle region from 35% to 85% of its height. EasyOCR
+reads candidate plate text with Thai and English models. Review and correct the
+editable result before downloading the PDF;
 confidence at or below 30% defaults to
 "ไม่ติดแผ่นป้ายทะเบียน/ไม่ชัดเจน". The plate crop and OCR text are shown with each
 detection. OCR enlarges the crop 3x and applies grayscale CLAHE contrast enhancement.
@@ -48,7 +49,7 @@ Rows can also be added or deleted in the history editor. Entries marked as
 "ไม่พบการกระทำผิด (ไม่นำลงรายงาน)" are excluded from the history and PDF. The
 history page can create a PDF from the latest edited records and export the table
 as UTF-8 CSV. For video uploads, sampled detections with overlapping vehicle boxes
-are consolidated by keeping the sharpest plate crop for OCR.
+are consolidated by keeping the sharpest motorcycle plate-search region for OCR.
 Reporter name and bank account are optional and included only in the downloaded PDF;
 they are not stored in detection history.
 

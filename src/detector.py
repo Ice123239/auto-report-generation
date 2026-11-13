@@ -130,15 +130,16 @@ class ViolationDetector:
     def _crop_motorcycle_plate(
         image: np.ndarray,
         bbox: tuple[int, int, int, int],
-    ) -> np.ndarray:
+    ) -> tuple[np.ndarray, np.ndarray]:
         x1, y1, x2, y2 = bbox
         vehicle = image[y1:y2, x1:x2]
         vehicle_height, vehicle_width = vehicle.shape[:2]
-        crop_x1 = int(vehicle_width * 0.15)
-        crop_x2 = int(vehicle_width * 0.85)
-        crop_y1 = int(vehicle_height * 0.45)
-        crop_y2 = int(vehicle_height * 0.95)
-        return vehicle[crop_y1:crop_y2, crop_x1:crop_x2].copy()
+        search_y1 = int(vehicle_height * 0.35)
+        fallback_y2 = int(vehicle_height * 0.85)
+        return (
+            vehicle[search_y1:, :].copy(),
+            vehicle[search_y1:fallback_y2, :].copy(),
+        )
 
     def detect(
         self, image: np.ndarray, captured_at: datetime | None = None
@@ -328,7 +329,10 @@ class ViolationDetector:
                 round(motorcycle["bbox"][2] * scale_x),
                 round(motorcycle["bbox"][3] * scale_y),
             )
-            plate_image = self._crop_motorcycle_plate(source_image, plate_bbox)
+            plate_search_image, plate_fallback_image = self._crop_motorcycle_plate(
+                source_image,
+                plate_bbox,
+            )
             offense_parts: list[str] = []
             if riding_on_sidewalk:
                 offense_parts.append("ขับขี่บนทางเท้า")
@@ -378,7 +382,8 @@ class ViolationDetector:
                 ),
                 "offense": " และ ".join(offense_parts),
                 "evidence_image": evidence,
-                "plate_image": plate_image,
+                "plate_search_image": plate_search_image,
+                "plate_fallback_image": plate_fallback_image,
                 "plate_number": "",
             })
 

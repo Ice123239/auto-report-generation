@@ -24,6 +24,7 @@ class PlateOCR:
     UNREADABLE_PLATE = "ไม่ติดแผ่นป้ายทะเบียน/ไม่ชัดเจน"
     DEFAULT_MIN_CONFIDENCE = 0.3
     _UPSCALE_FACTOR = 3
+    _CANVAS_SIZE = 320
     _LATIN_TO_DIGIT = str.maketrans({"O": "0", "o": "0", "I": "1", "i": "1", "l": "1"})
     _THAI_PLATE = re.compile(r"^(\d{1,2})([ก-๙A-Z]{1,3})(\d{1,4})$")
 
@@ -110,6 +111,7 @@ class PlateOCR:
             enhanced,
             detail=1,
             paragraph=False,
+            canvas_size=self._CANVAS_SIZE,
         )
         detections = [
             (

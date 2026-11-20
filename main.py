@@ -302,6 +302,44 @@ def _show_history() -> None:
         )
 
 
+def _show_history_previews() -> None:
+    history = st.session_state.get("detection_history", [])
+    for item in reversed(history):
+        captured_at = item.get("captured_at") or "-"
+        filename = item.get("filename") or "ไม่ระบุชื่อไฟล์"
+        with st.expander(f"{captured_at} · {filename} · {item.get('record_id', '')}"):
+            evidence_image = item.get("evidence_image")
+            if isinstance(evidence_image, np.ndarray):
+                if evidence_image.ndim == 3 and evidence_image.shape[2] == 3:
+                    evidence_image = cv2.cvtColor(evidence_image, cv2.COLOR_BGR2RGB)
+                st.image(
+                    evidence_image,
+                    caption=f"ภาพหลักฐาน: {filename}",
+                    use_container_width=True,
+                )
+            else:
+                st.info("รายการนี้ไม่มีภาพหลักฐานที่บันทึกไว้")
+
+            st.markdown(f"**วันเวลาเกิดเหตุ:** {captured_at}")
+            st.markdown(f"**เวลาประมวลผล:** {item.get('processed_at') or '-'}")
+            st.markdown(f"**ไฟล์:** {filename}")
+            st.markdown(f"**สถานที่:** {item.get('location') or '-'}")
+            st.markdown(f"**ป้ายทะเบียน:** {item.get('plate_number') or 'ไม่พบข้อความ'}")
+            st.markdown(f"**ข้อหา:** {item.get('offense') or '-'}")
+            st.markdown(f"**แหล่งที่มาป้ายทะเบียน:** {item.get('plate_source') or '-'}")
+            st.markdown(f"**แหล่งที่มาวันเวลา:** {item.get('timestamp_source') or '-'}")
+            confidence = item.get("confidence")
+            st.markdown(
+                f"**ความมั่นใจ:** {confidence:.1%}"
+                if isinstance(confidence, (int, float))
+                else "**ความมั่นใจ:** -"
+            )
+            latitude = item.get("latitude")
+            longitude = item.get("longitude")
+            if latitude is not None and longitude is not None:
+                st.markdown(f"**พิกัด:** {latitude}, {longitude}")
+
+
 def _sharpness_score(image: np.ndarray) -> float:
     if image.size == 0:
         return 0.0
@@ -443,6 +481,7 @@ elif page == "ประวัติการตรวจจับ":
                 mime="application/pdf",
                 key="history_report_download",
             )
+    _show_history_previews()
 else:
     with st.sidebar:
         st.subheader("ตั้งค่าตรวจจับ")

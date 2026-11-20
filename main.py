@@ -308,15 +308,16 @@ def _show_history_previews() -> None:
         captured_at = item.get("captured_at") or "-"
         filename = item.get("filename") or "ไม่ระบุชื่อไฟล์"
         with st.expander(f"{captured_at} · {filename} · {item.get('record_id', '')}"):
-            evidence_image = item.get("evidence_image")
-            if isinstance(evidence_image, np.ndarray):
-                if evidence_image.ndim == 3 and evidence_image.shape[2] == 3:
-                    evidence_image = cv2.cvtColor(evidence_image, cv2.COLOR_BGR2RGB)
-                st.image(
-                    evidence_image,
-                    caption=f"ภาพหลักฐาน: {filename}",
-                    use_container_width=True,
-                )
+            img = item.get("evidence_image")
+            if img is not None and isinstance(img, np.ndarray) and img.size:
+                if img.ndim == 3 and img.shape[2] == 3:
+                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                if img.ndim == 2 or (
+                    img.ndim == 3 and img.shape[2] in (1, 3, 4)
+                ):
+                    st.image(img, caption=f"ภาพหลักฐาน: {filename}")
+                else:
+                    st.info("รูปแบบภาพหลักฐานไม่รองรับ")
             else:
                 st.info("รายการนี้ไม่มีภาพหลักฐานที่บันทึกไว้")
 

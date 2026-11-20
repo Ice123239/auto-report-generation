@@ -769,11 +769,11 @@ else:
                     try:
                         plate_reader = PlateOCR()
                         for violation in violations:
+                            plate_search_image = violation.get("plate_search_image")
+                            if plate_search_image is None:
+                                plate_search_image = violation.get("evidence_image")
                             plate_result = plate_reader.read_plate(
-                                violation.get(
-                                    "plate_search_image",
-                                    violation["evidence_image"],
-                                ),
+                                plate_search_image,
                                 fallback_image=violation.get("plate_fallback_image"),
                             )
                             plate_number = plate_result["plate_number"]
